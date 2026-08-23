@@ -1,0 +1,296 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum EventStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  FINISHED
+  CANCELLED
+}
+
+enum MatchStatus {
+  PENDING
+  OPEN
+  CLOSED
+  FINISHED
+  CANCELLED
+}
+
+enum BetStatus {
+  PENDING
+  WON
+  LOST
+  CANCELLED
+}
+
+enum ScrollType {
+  SHINOBI
+  PARAGONIO
+}
+
+// ============================================================
+// USER
+// ============================================================
+
+model User {
+  id              String @id @default(cuid())
+  discordId       String @unique
+  discordUsername String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  eventParticipants EventParticipant[]
+  bets              Bet[]
+  userCards         UserCard[]
+  userScrolls       UserScroll[]
+
+  @@index([discordId])
+}
+
+// ============================================================
+// EVENT
+// ============================================================
+
+model Event {
+  id                 String      @id @default(cuid())
+  name               String
+  startingParagonita Int         @default(100)
+  status             EventStatus @default(DRAFT)
+
+  createdAt  DateTime  @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  participants EventParticipant[]
+  matches      Match[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============================================================
+// PARTICIPACIÓN DE UN USUARIO EN UN EVENTO
+// ============================================================
+
+model EventParticipant {
+  id String @id @default(cuid())
+
+  eventId String
+  userId  String
+
+  startingBalance Int
+  currentBalance  Int
+
+  totalWagered Int @default(0)
+  totalWon     Int @default(0)
+  totalLost    Int @default(0)
+
+  currentStreak Int @default(0)
+  highestStreak Int @default(0)
+
+  joinedAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  bets Bet[]
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+// ============================================================
+// MATCH / COMBATE
+// ============================================================
+
+model Match {
+  id String @id @default(cuid())
+
+  eventId String
+  number  Int
+
+  competitorA String
+  competitorB String
+
+  winner String?
+  status MatchStatus @default(PENDING)
+
+  createdAt  DateTime  @default(now())
+  openedAt   DateTime?
+  closedAt   DateTime?
+  resolvedAt DateTime?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  bets  Bet[]
+
+  @@unique([eventId, number])
+  @@index([eventId])
+  @@index([status])
+}
+
+// ============================================================
+// APUESTA
+// ============================================================
+
+model Bet {
+  id String @id @default(cuid())
+
+  userId             String
+  eventParticipantId String
+  matchId            String
+
+  competitor String
+  amount     Int
+
+  status BetStatus @default(PENDING)
+
+  // Datos del sistema de rachas
+  streakBefore Int @default(0)
+  streakAfter  Int @default(0)
+
+  // Multiplicador utilizado al resolver la apuesta
+  multiplier Float?
+
+  // Cantidad obtenida de la apuesta.
+  // Ejemplo: apuesta 20 × 2 = 40
+  payout Int?
+
+  // Resultado neto de la apuesta.
+  // Ejemplo:
+  // +20 si apostó 20 y recibió 40
+  // -20 si perdió
+  netResult Int?
+
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  user             User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  eventParticipant EventParticipant @relation(fields: [eventParticipantId], references: [id], onDelete: Restrict)
+  match            Match            @relation(fields: [matchId], references: [id], onDelete: Restrict)
+
+  cards BetCard[]
+
+  @@index([userId])
+  @@index([eventParticipantId])
+  @@index([matchId])
+  @@index([status])
+}
+
+// ============================================================
+// CARTAS
+// ============================================================
+
+model Card {
+  id String @id @default(cuid())
+
+  name        String @unique
+  description String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userCards UserCard[]
+  betCards  BetCard[]
+}
+
+// ============================================================
+// INVENTARIO DE CARTAS DEL USUARIO
+// ============================================================
+
+model UserCard {
+  id String @id @default(cuid())
+
+  userId String
+  cardId String
+
+  quantity Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  card Card @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, cardId])
+  @@index([userId])
+  @@index([cardId])
+}
+
+// ============================================================
+// CARTA UTILIZADA EN UNA APUESTA
+// ============================================================
+
+model BetCard {
+  id String @id @default(cuid())
+
+  betId  String
+  cardId String
+
+  // Información adicional sobre cómo se resolvió el efecto.
+  // Nos permite guardar resultados específicos de cartas
+  // sin tener que modificar el schema cada vez.
+  effectResult String?
+
+  createdAt DateTime @default(now())
+
+  bet  Bet  @relation(fields: [betId], references: [id], onDelete: Restrict)
+  card Card @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@unique([betId, cardId])
+  @@index([betId])
+  @@index([cardId])
+}
+
+// ============================================================
+// PERGAMINOS
+// ============================================================
+
+model Scroll {
+  id String @id @default(cuid())
+
+  name String
+  type ScrollType
+
+  createdAt DateTime @default(now())
+
+  userScrolls UserScroll[]
+
+  @@unique([name, type])
+}
+
+// ============================================================
+// INVENTARIO DE PERGAMINOS
+// ============================================================
+
+model UserScroll {
+  id String @id @default(cuid())
+
+  userId   String
+  scrollId String
+
+  quantity Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  scroll Scroll @relation(fields: [scrollId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, scrollId])
+  @@index([userId])
+  @@index([scrollId])
+}
