@@ -12,7 +12,8 @@ function requireEnv(name: string): string {
 
 export const env = {
   discordToken: requireEnv("DISCORD_TOKEN"),
-  discordClientId: requireEnv("DISCORD_CLIENT_ID"),
+  discordClientId: requireEnv("CLIENT_ID"),
+  guildId: requireEnv("GUILD_ID"),
   databaseUrl: requireEnv("DATABASE_URL"),
   directUrl: process.env.DIRECT_URL,
 } as const;

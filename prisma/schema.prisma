@@ -38,6 +38,8 @@ enum BetStatus {
 enum ScrollType {
   SHINOBI
   PARAGONIO
+  EVENT
+  SPECIAL
 }
 
 // ============================================================
@@ -175,8 +177,11 @@ model Bet {
   // -20 si perdió
   netResult Int?
 
-  createdAt  DateTime  @default(now())
-  resolvedAt DateTime?
+  rewardCharacterName String?
+
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+  cancelledAt DateTime?
 
   user             User             @relation(fields: [userId], references: [id], onDelete: Restrict)
   eventParticipant EventParticipant @relation(fields: [eventParticipantId], references: [id], onDelete: Restrict)
@@ -184,6 +189,7 @@ model Bet {
 
   cards BetCard[]
 
+  @@unique([eventParticipantId, matchId])
   @@index([userId])
   @@index([eventParticipantId])
   @@index([matchId])
@@ -262,8 +268,9 @@ model BetCard {
 model Scroll {
   id String @id @default(cuid())
 
-  name String
-  type ScrollType
+  name        String
+  type        ScrollType
+  description String?
 
   createdAt DateTime @default(now())
 

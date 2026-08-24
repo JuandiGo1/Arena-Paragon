@@ -68,8 +68,18 @@ const cards = [
 ] as const;
 
 const scrolls = [
-  { name: "Pergamino Shinobi", type: ScrollType.SHINOBI },
-  { name: "Pergamino de Paragonio", type: ScrollType.PARAGONIO },
+  {
+    name: "Pergamino Shinobi",
+    type: ScrollType.SHINOBI,
+    description:
+      "Pergamino de recompensas utilizado en Arena Shinobi. Al abrirlo se determina una recompensa mediante una tirada de 1d20.",
+  },
+  {
+    name: "Pergamino de Paragonio",
+    type: ScrollType.PARAGONIO,
+    description:
+      "Pergamino de recompensas destinado a organizadores. Al abrirlo se determina una recompensa mediante una tirada de 1d10.",
+  },
 ] as const;
 
 async function main(): Promise<void> {
@@ -89,10 +99,13 @@ async function main(): Promise<void> {
           type: scroll.type,
         },
       },
-      update: {},
+      update: {
+        description: scroll.description,
+      },
       create: {
         name: scroll.name,
         type: scroll.type,
+        description: scroll.description,
       },
     });
   }
