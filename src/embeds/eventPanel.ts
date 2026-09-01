@@ -191,6 +191,93 @@ export function buildDeleteConfirmation(
   };
 }
 
+// ─── Configuración de rachas ──────────────────────────────────────────────────
+
+export function buildStreakSelectionMessage() {
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('event:yes-streaks')
+      .setLabel('Sí, usar rachas')
+      .setEmoji('🔥')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('event:no-streaks')
+      .setLabel('No, solo ×2 fijo')
+      .setEmoji('💰')
+      .setStyle(ButtonStyle.Secondary),
+  );
+  return {
+    content: '',
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0x5865f2)
+        .setTitle('⚡ ¿Este evento usa sistema de rachas?')
+        .setDescription(
+          `Con rachas, el multiplicador crece según victorias consecutivas.\n\n` +
+          `**Sin rachas:** todas las apuestas se resuelven a ×2.0\n` +
+          `**Con rachas:** el multiplicador varía según la racha de cada jugador`,
+        ),
+    ],
+    components: [row],
+  };
+}
+
+export function buildStreakConfigModal() {
+  const DEFAULT = '2.0, 2.0, 2.1, 2.2, 2.3, 2.4';
+  return new ModalBuilder()
+    .setCustomId('event:streak-config')
+    .setTitle('Configurar multiplicadores de racha')
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId('streak_multipliers')
+          .setLabel('Multiplicadores (separados por coma)')
+          .setPlaceholder('2.0, 2.0, 2.1, 2.2, 2.3, 2.4')
+          .setValue(DEFAULT)
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMinLength(3)
+          .setMaxLength(200),
+      ),
+    );
+}
+
+export function buildStreakConfigPreview(multipliers: number[]) {
+  const lines = multipliers.map(
+    (m, i) => `Racha **${i + 1}** → ×${m.toFixed(1)}`,
+  );
+  return {
+    content: '',
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0x57f287)
+        .setTitle('🔥 Rachas configuradas')
+        .setDescription(lines.join('\n') + `\n\n_Racha ${multipliers.length}+ usa ×${multipliers[multipliers.length - 1]?.toFixed(1)}_`),
+    ],
+    components: [],
+  };
+}
+
+export function buildCloseEventConfirmation(eventId: string) {
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`event:close-execute:${eventId}`)
+      .setLabel('Cerrar evento')
+      .setEmoji('🏁')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId('event:close-cancel')
+      .setLabel('Volver')
+      .setEmoji('↩️')
+      .setStyle(ButtonStyle.Secondary),
+  );
+  return {
+    content: '⚠️ ¿Cerrar este evento? El estado pasará a **Finalizado**. Los combates que no se hayan resuelto quedarán sin ganador.',
+    embeds: [],
+    components: [row],
+  };
+}
+
 export function buildCancelConfirmation(eventId: string) {
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()

@@ -72,6 +72,9 @@ model Event {
   startingParagonita Int         @default(100)
   status             EventStatus @default(DRAFT)
 
+  useStreaks        Boolean @default(false)
+  streakMultipliers Json? // number[] e.g. [2.0, 2.0, 2.1, 2.2, 2.3, 2.4]
+
   createdAt  DateTime  @default(now())
   startedAt  DateTime?
   finishedAt DateTime?

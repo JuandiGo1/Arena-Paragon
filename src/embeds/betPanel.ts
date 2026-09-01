@@ -162,6 +162,34 @@ export function buildBetSuccessMessage(
   return { content: "", embeds: [embed], components: [row] };
 }
 
+export function buildAlreadyBetMessage(
+  matchNumber: number,
+  matchId: string,
+  competitorName: string,
+  amount: number,
+  rewardCharacterName: string,
+) {
+  const embed = new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle(`🎲 Ya apostaste — Combate #${matchNumber}`)
+    .setDescription(
+      `⚔️ **${competitorName}**\n` +
+        `💰 **${amount}** Paragonita\n` +
+        `🎭 Recompensa para: **${rewardCharacterName}**\n\n` +
+        `El combate sigue abierto. Puedes editar o retirar tu apuesta.`,
+    );
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`event:bet-edit:${matchId}`)
+      .setLabel("Editar mi apuesta")
+      .setEmoji("✏️")
+      .setStyle(ButtonStyle.Primary),
+  );
+
+  return { content: "", embeds: [embed], components: [row] };
+}
+
 export function buildMatchBetsPublicMessage(
   matchNumber: number,
   matchId: string,
@@ -377,6 +405,37 @@ export function buildBetWithdrawConfirmation(matchId: string, amount: number) {
       .setCustomId(`event:bet-edit:${matchId}`)
       .setLabel("Volver")
       .setEmoji("↩️")
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  return { content: "", embeds: [embed], components: [row] };
+}
+
+export function buildOwnMoneyWarning(
+  ownAmount: number,
+  eventBalance: number,
+  confirmCustomId: string,
+  backCustomId: string,
+) {
+  const embed = new EmbedBuilder()
+    .setColor(0xffa500)
+    .setTitle("⚠️ Estás usando dinero propio")
+    .setDescription(
+      `Tu saldo del evento es **${eventBalance} Paragonita**, pero estás apostando más.\n\n` +
+        `💸 Usarás **${ownAmount} Paragonita** de tu propio dinero.\n\n` +
+        `_Si pierdes, esa cantidad saldrá de tu propio bolsillo._`,
+    );
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(confirmCustomId)
+      .setLabel("Continuar de todas formas")
+      .setEmoji("⚠️")
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(backCustomId)
+      .setLabel("Cancelar")
+      .setEmoji("❌")
       .setStyle(ButtonStyle.Secondary),
   );
 

@@ -26,7 +26,8 @@ registerModalHandler({
 
     try {
       const { MatchRepository } = await import('../../../repositories/MatchRepository.js');
-      const { buildBetConfirmationMessage } = await import('../../../embeds/betPanel.js');
+      const { BetService } = await import('../../../services/BetService.js');
+      const { buildBetConfirmationMessage, buildOwnMoneyWarning } = await import('../../../embeds/betPanel.js');
 
       const match = await MatchRepository.findById(matchId);
       if (!match || match.status !== 'OPEN') {
@@ -44,12 +45,27 @@ registerModalHandler({
         rewardCharacterName,
       });
 
+      const availableBalance = await BetService.getAvailableBalance(interaction.user.id, matchId);
+
       await interaction.deferUpdate();
-      await interaction.editReply(
-        buildBetConfirmationMessage(
-          match.number, matchId, competitor, amount, rewardCharacterName,
-        ) as Parameters<typeof interaction.editReply>[0],
-      );
+
+      if (amount > availableBalance) {
+        const ownAmount = amount - availableBalance;
+        await interaction.editReply(
+          buildOwnMoneyWarning(
+            ownAmount,
+            availableBalance,
+            `event:bet-confirm:${matchId}`,
+            `event:bet-back:${matchId}`,
+          ) as Parameters<typeof interaction.editReply>[0],
+        );
+      } else {
+        await interaction.editReply(
+          buildBetConfirmationMessage(
+            match.number, matchId, competitor, amount, rewardCharacterName,
+          ) as Parameters<typeof interaction.editReply>[0],
+        );
+      }
     } catch (err) {
       logger.error('Error al procesar modal de apuesta', err);
       await interaction.reply({ content: '❌ Error al procesar la apuesta.', ephemeral: true });
@@ -102,12 +118,28 @@ registerModalHandler({
         originalAmount: currentBet.amount,
       });
 
+      const availableBalance = await BetService.getAvailableBalance(interaction.user.id, matchId);
+
       await interaction.deferUpdate();
-      await interaction.editReply(
-        buildBetEditConfirmMessage(
-          match.number, matchId, newCompetitor, amount, rewardCharacterName, currentBet.amount,
-        ) as Parameters<typeof interaction.editReply>[0],
-      );
+
+      if (amount > availableBalance) {
+        const { buildOwnMoneyWarning } = await import('../../../embeds/betPanel.js');
+        const ownAmount = amount - availableBalance;
+        await interaction.editReply(
+          buildOwnMoneyWarning(
+            ownAmount,
+            availableBalance,
+            `event:bet-edit-confirm:${matchId}`,
+            `event:bet-edit:${matchId}`,
+          ) as Parameters<typeof interaction.editReply>[0],
+        );
+      } else {
+        await interaction.editReply(
+          buildBetEditConfirmMessage(
+            match.number, matchId, newCompetitor, amount, rewardCharacterName, currentBet.amount,
+          ) as Parameters<typeof interaction.editReply>[0],
+        );
+      }
     } catch (err) {
       logger.error('Error al procesar modal de edición', err);
       await interaction.reply({ content: '❌ Error al procesar la modificación.', ephemeral: true });

@@ -2,14 +2,19 @@ import { EmbedBuilder } from 'discord.js';
 import {
   buildAddMatchModal,
   buildCancelConfirmation,
+  buildCloseEventConfirmation,
   buildDeleteConfirmation,
   buildEditEventModal,
   buildEventPanel,
   buildMatchSelect,
   buildPreviewPanel,
+  buildStreakConfigModal,
 } from '../../../embeds/eventPanel.js';
+import { buildBitacoraEphemeral, buildBitacoraTexts } from '../../../embeds/logPanel.js';
 import { EventService } from '../../../services/EventService.js';
+import { EventRepository } from '../../../repositories/EventRepository.js';
 import { MatchRepository } from '../../../repositories/MatchRepository.js';
+import { pendingEventCreations } from '../../../lib/pendingEventCreations.js';
 import { logger } from '../../../utils/logger.js';
 import { registerButtonHandler } from '../ButtonHandler.js';
 
@@ -174,6 +179,7 @@ registerButtonHandler({
       const { buildMatchOpenMessage } = await import('../../../embeds/eventPanel.js');
       const { matchMessages } = await import('../../../lib/matchMessages.js');
 
+      const { buildMatchControlPanel } = await import('../../../embeds/matchPanel.js');
       const { event, firstMatch } = await EventService.startEvent(eventId);
 
       if (interaction.channel && 'send' in interaction.channel) {
@@ -189,11 +195,15 @@ registerButtonHandler({
         matchMessages.store(firstMatch.id, sentMessage.channelId, sentMessage.id);
       }
 
-      await interaction.editReply({
-        content: `✅ **${event.name}** iniciado. El combate #${firstMatch.number} está abierto.`,
-        embeds: [],
-        components: [],
-      });
+      await interaction.editReply(
+        buildMatchControlPanel(
+          firstMatch.id,
+          firstMatch.number,
+          firstMatch.competitorA,
+          firstMatch.competitorB,
+          'OPEN',
+        ) as Parameters<typeof interaction.editReply>[0],
+      );
     } catch (err) {
       logger.error('Error al iniciar evento', err);
       const msg = err instanceof Error ? err.message : 'Error desconocido.';
@@ -372,5 +382,135 @@ registerButtonHandler({
         components: [],
       };
     });
+  },
+});
+
+// ─── event:close-confirm:<eventId> — muestra confirmación de cierre ──────────
+
+registerButtonHandler({
+  customId: 'event:close-confirm',
+  async execute(interaction) {
+    const eventId = interaction.customId.split(':')[2];
+    await deferAndUpdate(interaction, async () =>
+      buildCloseEventConfirmation(eventId) as Parameters<typeof interaction.editReply>[0],
+    );
+  },
+});
+
+// ─── event:close-execute:<eventId> — cierra el evento y muestra bitácora ──────
+
+registerButtonHandler({
+  customId: 'event:close-execute',
+  async execute(interaction) {
+    const eventId = interaction.customId.split(':')[2];
+    await interaction.deferUpdate();
+    try {
+      await EventService.closeEvent(eventId);
+      const logData = await EventRepository.findWithFullLog(eventId);
+      if (!logData) {
+        await interaction.editReply({ content: '🏁 Evento cerrado.', embeds: [], components: [] });
+        return;
+      }
+      await interaction.editReply(
+        buildBitacoraEphemeral(logData, eventId) as Parameters<typeof interaction.editReply>[0],
+      );
+    } catch (err) {
+      logger.error('Error al cerrar evento', err);
+      const msg = err instanceof Error ? err.message : 'Error desconocido.';
+      await interaction.editReply({ content: `❌ ${msg}`, embeds: [], components: [] });
+    }
+  },
+});
+
+// ─── event:publish-log:<eventId> — publica la bitácora en el canal ────────────
+
+registerButtonHandler({
+  customId: 'event:publish-log',
+  async execute(interaction) {
+    const eventId = interaction.customId.split(':')[2];
+    await interaction.deferUpdate();
+    try {
+      const logData = await EventRepository.findWithFullLog(eventId);
+      if (!logData) {
+        await interaction.editReply({ content: '❌ Evento no encontrado.', embeds: [], components: [] });
+        return;
+      }
+      if (interaction.channel && 'send' in interaction.channel) {
+        const texts = buildBitacoraTexts(logData);
+        for (const text of texts) {
+          await interaction.channel.send({ content: text });
+        }
+      }
+      await interaction.editReply({
+        content: '✅ Bitácora publicada en el canal.',
+        embeds: [],
+        components: [],
+      });
+    } catch (err) {
+      logger.error('Error al publicar bitácora', err);
+      const msg = err instanceof Error ? err.message : 'Error desconocido.';
+      await interaction.editReply({ content: `❌ ${msg}`, embeds: [], components: [] });
+    }
+  },
+});
+
+// ─── event:close-cancel — cancela el cierre ──────────────────────────────────
+
+registerButtonHandler({
+  customId: 'event:close-cancel',
+  async execute(interaction) {
+    await interaction.update({
+      content: 'Operación cancelada.',
+      embeds: [],
+      components: [],
+    });
+  },
+});
+
+// ─── event:no-streaks — crea evento sin sistema de rachas ────────────────────
+
+registerButtonHandler({
+  customId: 'event:no-streaks',
+  async execute(interaction) {
+    const pending = pendingEventCreations.get(interaction.user.id);
+    if (!pending) {
+      await interaction.update({
+        content: '❌ No hay evento pendiente. Vuelve a ejecutar `/evento crear`.',
+        embeds: [],
+        components: [],
+      });
+      return;
+    }
+
+    await interaction.deferUpdate();
+    try {
+      const event = await EventService.createEvent({ ...pending, useStreaks: false });
+      pendingEventCreations.clear(interaction.user.id);
+
+      const full = await EventService.getEventWithMatches(event.id);
+      if (!full) throw new Error('Error al cargar el evento creado.');
+      await interaction.editReply(buildEventPanel(full) as Parameters<typeof interaction.editReply>[0]);
+    } catch (err) {
+      logger.error('Error al crear evento sin rachas', err);
+      const msg = err instanceof Error ? err.message : 'Error desconocido.';
+      await interaction.editReply({ content: `❌ ${msg}`, embeds: [], components: [] });
+    }
+  },
+});
+
+// ─── event:yes-streaks — abre modal de configuración de multiplicadores ───────
+
+registerButtonHandler({
+  customId: 'event:yes-streaks',
+  async execute(interaction) {
+    const pending = pendingEventCreations.get(interaction.user.id);
+    if (!pending) {
+      await interaction.reply({
+        content: '❌ No hay evento pendiente. Vuelve a ejecutar `/evento crear`.',
+        ephemeral: true,
+      });
+      return;
+    }
+    await interaction.showModal(buildStreakConfigModal());
   },
 });

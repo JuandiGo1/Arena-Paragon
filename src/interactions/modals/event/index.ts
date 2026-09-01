@@ -2,9 +2,11 @@ import type { ModalSubmitInteraction } from 'discord.js';
 import {
   buildEventPanel,
   buildAddMatchModal,
+  buildStreakSelectionMessage,
 } from '../../../embeds/eventPanel.js';
 import { EventService } from '../../../services/EventService.js';
 import { MatchService } from '../../../services/MatchService.js';
+import { pendingEventCreations } from '../../../lib/pendingEventCreations.js';
 import { logger } from '../../../utils/logger.js';
 import { registerModalHandler } from '../ModalHandler.js';
 
@@ -44,21 +46,57 @@ registerModalHandler({
       return;
     }
 
+    pendingEventCreations.set(interaction.user.id, {
+      name: name.trim(),
+      startingParagonita: parseInt(paragonitaRaw.trim(), 10),
+    });
+
+    await interaction.reply({
+      ...(buildStreakSelectionMessage() as object),
+      ephemeral: true,
+    } as Parameters<typeof interaction.reply>[0]);
+  },
+});
+
+// ─── event:streak-config ──────────────────────────────────────────────────────
+
+registerModalHandler({
+  customId: 'event:streak-config',
+  async execute(interaction) {
+    const raw = interaction.fields.getTextInputValue('streak_multipliers');
+    const pending = pendingEventCreations.get(interaction.user.id);
+
+    if (!pending) {
+      await replyError(interaction, '❌ No hay evento pendiente. Vuelve a ejecutar `/evento crear`.');
+      return;
+    }
+
+    const multipliers = raw
+      .split(',')
+      .map((s) => parseFloat(s.trim()))
+      .filter((n) => !isNaN(n) && n > 0);
+
+    if (multipliers.length < 1) {
+      await replyError(interaction, '❌ Formato inválido. Usa números separados por coma, por ejemplo: `2.0, 2.0, 2.1, 2.2`');
+      return;
+    }
+
     await interaction.deferReply({ ephemeral: true });
 
     try {
       const event = await EventService.createEvent({
-        name: name.trim(),
-        startingParagonita: parseInt(paragonitaRaw.trim(), 10),
+        ...pending,
+        useStreaks: true,
+        streakMultipliers: multipliers,
       });
+      pendingEventCreations.clear(interaction.user.id);
+
       const full = await EventService.getEventWithMatches(event.id);
       if (!full) throw new Error('Error al cargar el evento creado.');
       await interaction.editReply(buildEventPanel(full) as Parameters<typeof interaction.editReply>[0]);
     } catch (err) {
-      logger.error('Error al crear evento', err);
-      if (interaction.deferred) {
-        await interaction.editReply('❌ Hubo un error al crear el evento. Inténtalo de nuevo.');
-      }
+      logger.error('Error al crear evento con rachas', err);
+      await interaction.editReply('❌ Hubo un error al crear el evento. Inténtalo de nuevo.');
     }
   },
 });

@@ -4,6 +4,8 @@ import { prisma } from '../lib/prisma.js';
 export type CreateEventData = {
   name: string;
   startingParagonita: number;
+  useStreaks?: boolean;
+  streakMultipliers?: number[];
 };
 
 export type UpdateEventData = {
@@ -11,6 +13,7 @@ export type UpdateEventData = {
   startingParagonita?: number;
   status?: EventStatus;
   startedAt?: Date | null;
+  finishedAt?: Date | null;
 };
 
 export const EventRepository = {
@@ -20,6 +23,8 @@ export const EventRepository = {
         name: data.name,
         startingParagonita: data.startingParagonita,
         status: 'DRAFT',
+        useStreaks: data.useStreaks ?? false,
+        streakMultipliers: data.streakMultipliers ?? undefined,
       },
     });
   },
@@ -67,7 +72,7 @@ export const EventRepository = {
 
   async findEditable(limit = 25) {
     return prisma.event.findMany({
-      where: { status: { in: ['DRAFT', 'OPEN', 'IN_PROGRESS'] } },
+      where: { status: { in: ['DRAFT', 'OPEN'] } },
       include: { matches: { orderBy: { number: 'asc' } } },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -77,6 +82,45 @@ export const EventRepository = {
   async findFinished(limit = 25) {
     return prisma.event.findMany({
       where: { status: { in: ['FINISHED', 'CANCELLED'] } },
+      include: { matches: { orderBy: { number: 'asc' } } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  },
+
+  async findInProgress(limit = 25) {
+    return prisma.event.findMany({
+      where: { status: 'IN_PROGRESS' },
+      include: { matches: { orderBy: { number: 'asc' } } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  },
+
+  async findWithFullLog(eventId: string) {
+    return prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        participants: {
+          include: {
+            user: { select: { discordId: true, discordUsername: true } },
+            bets: {
+              where: { status: { in: ['WON', 'LOST'] } },
+              include: {
+                match: { select: { number: true, competitorA: true, competitorB: true, winner: true } },
+              },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+          orderBy: { currentBalance: 'desc' },
+        },
+      },
+    });
+  },
+
+  async findInProgressWithOpenMatches(limit = 25) {
+    return prisma.event.findMany({
+      where: { status: 'IN_PROGRESS', matches: { some: { status: 'OPEN' } } },
       include: { matches: { orderBy: { number: 'asc' } } },
       orderBy: { createdAt: 'desc' },
       take: limit,

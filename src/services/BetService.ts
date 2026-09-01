@@ -166,12 +166,8 @@ export const BetService = {
         throw new Error('No se puede modificar esta apuesta en su estado actual.');
       }
 
-      // 6. Verify and update balance
+      // 6. Update balance (can go negative when betting own money)
       const newBalance = participant.currentBalance + balanceDelta;
-      if (newBalance < 0) {
-        const available = participant.currentBalance + (existingBet?.status === 'PENDING' ? existingBet.amount : 0);
-        throw new Error(`Saldo insuficiente. Disponible: ${available} Paragonita.`);
-      }
 
       await tx.eventParticipant.update({
         where: { id: participant.id },

@@ -127,6 +127,45 @@ async function handleEditar(interaction: ChatInputCommandInteraction): Promise<v
   }
 }
 
+async function handleContinuar(interaction: ChatInputCommandInteraction): Promise<void> {
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    const events = await EventService.getInProgressEventsWithOpenMatches();
+
+    if (events.length === 0) {
+      await interaction.editReply('📭 No hay eventos en curso con combates abiertos actualmente.');
+      return;
+    }
+
+    const select = new StringSelectMenuBuilder()
+      .setCustomId('event:resume')
+      .setPlaceholder('Selecciona el evento a continuar')
+      .addOptions(
+        events.map(e => {
+          const openMatch = e.matches.find(m => m.status === 'OPEN');
+          const desc = openMatch
+            ? `⚔️ Combate #${openMatch.number}: ${openMatch.competitorA} vs ${openMatch.competitorB}`
+            : `⚔️ ${e.matches.length} combate(s)`;
+          return new StringSelectMenuOptionBuilder()
+            .setLabel(e.name.length > 97 ? `${e.name.slice(0, 97)}…` : e.name)
+            .setDescription(desc.length > 97 ? `${desc.slice(0, 97)}…` : desc)
+            .setValue(e.id);
+        }),
+      );
+
+    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+
+    await interaction.editReply({
+      content: 'Selecciona el evento a continuar:',
+      components: [row],
+    });
+  } catch (err) {
+    logger.error('Error al listar eventos en curso', err);
+    await interaction.editReply('❌ Hubo un error al obtener los eventos.');
+  }
+}
+
 async function handleHistorial(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
@@ -183,6 +222,9 @@ export default {
     )
     .addSubcommand(sub =>
       sub.setName('historial').setDescription('Consulta eventos finalizados o cancelados.'),
+    )
+    .addSubcommand(sub =>
+      sub.setName('continuar').setDescription('Republica el mensaje del combate activo de un evento en curso.'),
     ),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -192,5 +234,6 @@ export default {
     if (sub === 'iniciar') await handleIniciar(interaction);
     if (sub === 'editar') await handleEditar(interaction);
     if (sub === 'historial') await handleHistorial(interaction);
+    if (sub === 'continuar') await handleContinuar(interaction);
   },
 } satisfies Command;

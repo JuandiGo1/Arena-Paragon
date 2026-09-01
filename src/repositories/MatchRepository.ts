@@ -13,7 +13,7 @@ export type UpdateMatchData = {
   competitorB?: string;
   status?: MatchStatus;
   openedAt?: Date;
-  closedAt?: Date;
+  closedAt?: Date | null;
   resolvedAt?: Date;
   winner?: string;
 };
@@ -55,6 +55,34 @@ export const MatchRepository = {
       _max: { number: true },
     });
     return result._max.number ?? 0;
+  },
+
+  async findOpenByEventId(eventId: string) {
+    return prisma.match.findMany({
+      where: { eventId, status: 'OPEN' },
+      orderBy: { number: 'asc' },
+    });
+  },
+
+  async findActiveByEventId(eventId: string) {
+    return prisma.match.findFirst({
+      where: { eventId, status: { in: ['OPEN', 'CLOSED'] } },
+      orderBy: { number: 'asc' },
+    });
+  },
+
+  async findOpenOrClosedByEventId(eventId: string) {
+    return prisma.match.findMany({
+      where: { eventId, status: { in: ['OPEN', 'CLOSED'] } },
+      orderBy: { number: 'asc' },
+    });
+  },
+
+  async findNextDraft(eventId: string, afterNumber: number) {
+    return prisma.match.findFirst({
+      where: { eventId, status: 'PENDING', number: { gt: afterNumber } },
+      orderBy: { number: 'asc' },
+    });
   },
 
   async reorderAfterDeletion(eventId: string, deletedNumber: number) {

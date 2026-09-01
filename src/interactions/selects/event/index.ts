@@ -1,3 +1,4 @@
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { buildEditMatchModal } from '../../../embeds/eventPanel.js';
 import { buildDeleteConfirmation } from '../../../embeds/eventPanel.js';
 import { MatchRepository } from '../../../repositories/MatchRepository.js';
@@ -39,17 +40,39 @@ registerSelectHandler({
     try {
       const { EventService } = await import('../../../services/EventService.js');
       const { buildEventViewEmbed } = await import('../../../embeds/eventPanel.js');
-
       const event = await EventService.getEventWithMatches(eventId);
       if (!event) {
         await interaction.editReply({ content: '❌ Evento no encontrado.', components: [] });
         return;
       }
 
+      let components: ActionRowBuilder<ButtonBuilder>[] = [];
+      if (event.status === 'DRAFT' || event.status === 'OPEN') {
+        components = [
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`event:edit:${eventId}`)
+              .setLabel('Editar evento')
+              .setEmoji('⚙️')
+              .setStyle(ButtonStyle.Secondary),
+          ),
+        ];
+      } else if (event.status === 'IN_PROGRESS') {
+        components = [
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`event:close-confirm:${eventId}`)
+              .setLabel('Cerrar evento')
+              .setEmoji('🏁')
+              .setStyle(ButtonStyle.Danger),
+          ),
+        ];
+      }
+
       await interaction.editReply({
         content: '',
         embeds: [buildEventViewEmbed(event)],
-        components: [],
+        components,
       });
     } catch (err) {
       logger.error('Error al mostrar evento', err);
@@ -160,7 +183,55 @@ registerSelectHandler({
   },
 });
 
-// ─── event:history — muestra el historial de un evento finalizado ─────────────
+// ─── event:resume — republica el combate activo de un evento en curso ────────
+
+registerSelectHandler({
+  customId: 'event:resume',
+  async execute(interaction) {
+    const eventId = interaction.values[0];
+    await interaction.deferUpdate();
+
+    try {
+      const { matchMessages } = await import('../../../lib/matchMessages.js');
+      const { EventRepository } = await import('../../../repositories/EventRepository.js');
+      const { buildMatchOpenMessage } = await import('../../../embeds/eventPanel.js');
+
+      const openMatches = await MatchRepository.findOpenByEventId(eventId);
+
+      if (openMatches.length === 0) {
+        await interaction.editReply({
+          content: '📭 No hay ningún combate abierto actualmente en este evento.',
+          components: [],
+        });
+        return;
+      }
+
+      const match = openMatches[0];
+      const event = await EventRepository.findById(eventId);
+      if (!event) {
+        await interaction.editReply({ content: '❌ Evento no encontrado.', components: [] });
+        return;
+      }
+
+      if (interaction.channel && 'send' in interaction.channel) {
+        const sentMsg = await interaction.channel.send(
+          buildMatchOpenMessage(event.name, match.number, match.competitorA, match.competitorB, match.id),
+        );
+        matchMessages.store(match.id, sentMsg.channelId, sentMsg.id);
+      }
+
+      await interaction.editReply({
+        content: `✅ Combate #${match.number} republicado en el canal.`,
+        components: [],
+      });
+    } catch (err) {
+      logger.error('Error al continuar evento', err);
+      await interaction.editReply({ content: '❌ Error al continuar el evento.', components: [] });
+    }
+  },
+});
+
+// ─── event:history — muestra bitácora del evento finalizado ──────────────────
 
 registerSelectHandler({
   customId: 'event:history',
@@ -169,22 +240,20 @@ registerSelectHandler({
     await interaction.deferUpdate();
 
     try {
-      const { EventService } = await import('../../../services/EventService.js');
-      const { buildHistoryViewEmbed } = await import('../../../embeds/eventPanel.js');
+      const { EventRepository } = await import('../../../repositories/EventRepository.js');
+      const { buildBitacoraEphemeral } = await import('../../../embeds/logPanel.js');
 
-      const event = await EventService.getEventWithMatches(eventId);
-      if (!event) {
+      const logData = await EventRepository.findWithFullLog(eventId);
+      if (!logData) {
         await interaction.editReply({ content: '❌ Evento no encontrado.', components: [] });
         return;
       }
 
-      await interaction.editReply({
-        content: '',
-        embeds: [buildHistoryViewEmbed(event)],
-        components: [],
-      });
+      await interaction.editReply(
+        buildBitacoraEphemeral(logData, eventId) as Parameters<typeof interaction.editReply>[0],
+      );
     } catch (err) {
-      logger.error('Error al mostrar historial del evento', err);
+      logger.error('Error al mostrar bitácora del evento', err);
       await interaction.editReply({ content: '❌ Error al cargar el evento.', components: [] });
     }
   },

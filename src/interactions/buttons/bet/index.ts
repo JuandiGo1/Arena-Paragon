@@ -23,11 +23,23 @@ registerButtonHandler({
     try {
       const { MatchRepository } = await import('../../../repositories/MatchRepository.js');
       const { BetService } = await import('../../../services/BetService.js');
-      const { buildBetCompetitorSelectMessage } = await import('../../../embeds/betPanel.js');
+      const { buildBetCompetitorSelectMessage, buildAlreadyBetMessage } = await import('../../../embeds/betPanel.js');
 
       const match = await MatchRepository.findById(matchId);
       if (!match || match.status !== 'OPEN') {
         await interaction.reply({ content: '❌ El combate ya no acepta apuestas.', ephemeral: true });
+        return;
+      }
+
+      const existingBet = await BetService.getBetForUser(interaction.user.id, matchId);
+      if (existingBet && existingBet.status === 'PENDING') {
+        await interaction.reply({
+          ...buildAlreadyBetMessage(
+            match.number, matchId, existingBet.competitor, existingBet.amount,
+            existingBet.rewardCharacterName ?? '',
+          ),
+          ephemeral: true,
+        } as Parameters<typeof interaction.reply>[0]);
         return;
       }
 

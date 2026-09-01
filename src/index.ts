@@ -8,10 +8,13 @@ import { logger } from './utils/logger.js';
 // Registro de handlers (side-effect imports)
 import './interactions/buttons/event/index.js';
 import './interactions/buttons/bet/index.js';
+import './interactions/buttons/combate/index.js';
 import './interactions/modals/event/index.js';
 import './interactions/modals/bet/index.js';
 import './interactions/selects/event/index.js';
 import './interactions/selects/bet/index.js';
+import './interactions/selects/combate/index.js';
+import './interactions/selects/racha/index.js';
 
 logger.info('Loading commands...');
 const commands = await loadCommands();

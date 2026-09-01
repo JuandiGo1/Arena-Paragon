@@ -1,7 +1,12 @@
 import { EventRepository } from '../repositories/EventRepository.js';
 import { MatchRepository } from '../repositories/MatchRepository.js';
 
-export type CreateEventInput = { name: string; startingParagonita: number };
+export type CreateEventInput = {
+  name: string;
+  startingParagonita: number;
+  useStreaks?: boolean;
+  streakMultipliers?: number[];
+};
 export type UpdateEventInput = { name?: string; startingParagonita?: number };
 export type ValidationResult = { ok: true } | { ok: false; error: string };
 
@@ -108,5 +113,20 @@ export const EventService = {
 
   async getFinishedEvents() {
     return EventRepository.findFinished();
+  },
+
+  async getInProgressEvents() {
+    return EventRepository.findInProgress();
+  },
+
+  async getInProgressEventsWithOpenMatches() {
+    return EventRepository.findInProgressWithOpenMatches();
+  },
+
+  async closeEvent(id: string) {
+    const event = await EventRepository.findById(id);
+    if (!event) throw new Error('Evento no encontrado.');
+    if (event.status !== 'IN_PROGRESS') throw new Error('Solo se pueden cerrar eventos en curso.');
+    return EventRepository.update(id, { status: 'FINISHED', finishedAt: new Date() });
   },
 };
