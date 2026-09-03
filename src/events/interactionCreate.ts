@@ -46,6 +46,14 @@ export function registerInteractionCreateEvent(
         }
         return;
       }
+
+      if (interaction.isAutocomplete()) {
+        const command = commands.get(interaction.commandName);
+        if (command?.autocomplete) {
+          await command.autocomplete(interaction);
+        }
+        return;
+      }
     } catch (error) {
       logger.error('Unhandled error in interactionCreate', error);
     }

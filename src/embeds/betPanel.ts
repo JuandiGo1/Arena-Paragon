@@ -195,15 +195,32 @@ export function buildMatchBetsPublicMessage(
   matchId: string,
   competitorA: string,
   competitorB: string,
-  bets: Array<{ discordId: string; amount: number; competitor: string }>,
+  bets: Array<{ discordId: string; amount: number; ownAmount: number; competitor: string; rewardCharacterName: string | null }>,
 ) {
+  function fmt(n: number): string {
+    return n.toLocaleString('es-ES');
+  }
+
   const betLines =
     bets.length > 0
       ? bets
-          .map(
-            (b) =>
-              `👤 <@${b.discordId}>\n💰 ${b.amount} Paragonita → **${b.competitor}**`,
-          )
+          .map((b) => {
+            const hasOwn = b.ownAmount > 0;
+            const eventAmount = b.amount - b.ownAmount;
+            const charPart = b.rewardCharacterName ? ` · 🎭 **${b.rewardCharacterName}**` : '';
+
+            let amountLine: string;
+            if (hasOwn) {
+              amountLine =
+                `💰 \`${fmt(b.amount)} pg\` → **${b.competitor}**${charPart}\n` +
+                `  ├ Evento: \`${fmt(eventAmount)} pg\`\n` +
+                `  └ 💸 Propio: \`${fmt(b.ownAmount)} pg\``;
+            } else {
+              amountLine = `💰 \`${fmt(b.amount)} pg\` → **${b.competitor}**${charPart}`;
+            }
+
+            return `👤 <@${b.discordId}>\n${amountLine}`;
+          })
           .join("\n\n")
       : "_Sin apuestas aún._";
 

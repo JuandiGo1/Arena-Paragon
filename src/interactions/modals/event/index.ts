@@ -1,5 +1,6 @@
 import type { ModalSubmitInteraction } from 'discord.js';
 import {
+  buildCardsSelectionMessage,
   buildEventPanel,
   buildAddMatchModal,
   buildStreakSelectionMessage,
@@ -81,23 +82,17 @@ registerModalHandler({
       return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    // Store streak config in pending and advance to cards selection
+    pendingEventCreations.set(interaction.user.id, {
+      ...pending,
+      useStreaks: true,
+      streakMultipliers: multipliers,
+    });
 
-    try {
-      const event = await EventService.createEvent({
-        ...pending,
-        useStreaks: true,
-        streakMultipliers: multipliers,
-      });
-      pendingEventCreations.clear(interaction.user.id);
-
-      const full = await EventService.getEventWithMatches(event.id);
-      if (!full) throw new Error('Error al cargar el evento creado.');
-      await interaction.editReply(buildEventPanel(full) as Parameters<typeof interaction.editReply>[0]);
-    } catch (err) {
-      logger.error('Error al crear evento con rachas', err);
-      await interaction.editReply('❌ Hubo un error al crear el evento. Inténtalo de nuevo.');
-    }
+    await interaction.reply({
+      ...(buildCardsSelectionMessage() as object),
+      ephemeral: true,
+    } as Parameters<typeof interaction.reply>[0]);
   },
 });
 

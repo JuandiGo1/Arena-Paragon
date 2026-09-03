@@ -10,6 +10,7 @@ export type BetResolveResult = {
   competitor: string;
   rewardCharacterName: string;
   amount: number;
+  ownAmount: number;
   won: boolean;
   payout: number;
   netResult: number;
@@ -92,105 +93,125 @@ export const MatchService = {
   },
 
   async resolveMatch(matchId: string, winnerSlot: 'A' | 'B'): Promise<MatchResolveResult> {
-    return prisma.$transaction(async (tx) => {
-      const match = await tx.match.findUnique({
-        where: { id: matchId },
-        include: {
-          event: { select: { useStreaks: true, streakMultipliers: true } },
-          bets: {
-            where: { status: 'PENDING' },
-            include: {
-              eventParticipant: true,
-              user: { select: { discordId: true } },
-            },
+    // Read all data outside the transaction to keep writes fast and avoid timeouts
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        event: { select: { useStreaks: true, streakMultipliers: true } },
+        bets: {
+          where: { status: 'PENDING' },
+          include: {
+            eventParticipant: true,
+            user: { select: { discordId: true } },
           },
+          // ownAmount and rewardCharacterName are scalar fields, included by default
         },
-      });
+      },
+    });
 
-      if (!match) throw new Error('Combate no encontrado.');
-      if (!['OPEN', 'CLOSED'].includes(match.status)) {
-        throw new Error('Solo se pueden resolver combates activos (OPEN o CLOSED).');
-      }
+    if (!match) throw new Error('Combate no encontrado.');
+    if (!['OPEN', 'CLOSED'].includes(match.status)) {
+      throw new Error('Solo se pueden resolver combates activos (OPEN o CLOSED).');
+    }
 
-      const { useStreaks, streakMultipliers: rawMult } = match.event;
-      const multTable: number[] =
-        useStreaks && Array.isArray(rawMult) && rawMult.length > 0
-          ? (rawMult as number[])
-          : [2.0];
+    const { useStreaks, streakMultipliers: rawMult } = match.event;
+    const multTable: number[] =
+      useStreaks && Array.isArray(rawMult) && rawMult.length > 0
+        ? (rawMult as number[])
+        : [2.0];
 
-      const winner = winnerSlot === 'A' ? match.competitorA : match.competitorB;
-      const now = new Date();
-      const betResults: BetResolveResult[] = [];
+    const winner = winnerSlot === 'A' ? match.competitorA : match.competitorB;
+    const now = new Date();
 
-      for (const bet of match.bets) {
-        const won = bet.competitor === winner;
-        const streakBefore = bet.eventParticipant.currentStreak;
-        const streakAfter = won ? streakBefore + 1 : 0;
+    // Compute all results in memory before touching the DB
+    type Computed = {
+      result: BetResolveResult;
+      betId: string;
+      participantId: string;
+      payout: number;
+      streakAfter: number;
+      highestStreak: number;
+    };
 
-        let multiplier: number;
-        if (won) {
-          const idx = Math.min(streakAfter, multTable.length) - 1;
-          multiplier = multTable[Math.max(0, idx)] ?? 2.0;
-        } else {
-          multiplier = 0;
-        }
-
-        const payout = won ? Math.round(bet.amount * multiplier) : 0;
-        const netResult = won ? payout - bet.amount : -bet.amount;
-
-        await tx.bet.update({
-          where: { id: bet.id },
-          data: {
-            status: won ? 'WON' : 'LOST',
-            payout,
-            netResult,
-            resolvedAt: now,
-            multiplier: won ? multiplier : null,
-            streakBefore,
-            streakAfter,
-          },
-        });
-
-        const newHighest = Math.max(bet.eventParticipant.highestStreak, streakAfter);
-        await tx.eventParticipant.update({
-          where: { id: bet.eventParticipantId },
-          data: {
-            currentBalance: { increment: payout },
-            currentStreak: streakAfter,
-            highestStreak: newHighest,
-          },
-        });
-
-        betResults.push({
+    const computed: Computed[] = match.bets.map((bet) => {
+      const won = bet.competitor === winner;
+      const streakBefore = bet.eventParticipant.currentStreak;
+      const streakAfter = won ? streakBefore + 1 : 0;
+      const multiplier = won
+        ? (multTable[Math.max(0, Math.min(streakAfter, multTable.length) - 1)] ?? 2.0)
+        : 0;
+      const payout = won ? Math.ceil(bet.amount * multiplier) : 0;
+      const netResult = won ? payout - bet.amount : -bet.amount;
+      return {
+        result: {
           discordId: bet.user.discordId,
           competitor: bet.competitor,
           rewardCharacterName: bet.rewardCharacterName ?? '',
           amount: bet.amount,
+          ownAmount: bet.ownAmount,
           won,
           payout,
           netResult,
           streakBefore,
           streakAfter,
           multiplier,
-        });
-      }
-
-      await tx.match.update({
-        where: { id: matchId },
-        data: { status: 'FINISHED', winner, resolvedAt: now },
-      });
-
-      return {
-        matchId,
-        eventId: match.eventId,
-        matchNumber: match.number,
-        competitorA: match.competitorA,
-        competitorB: match.competitorB,
-        winner,
-        useStreaks,
-        betResults,
+        },
+        betId: bet.id,
+        participantId: bet.eventParticipantId,
+        payout,
+        streakAfter,
+        highestStreak: Math.max(bet.eventParticipant.highestStreak, streakAfter),
       };
     });
+
+    // Execute all writes in parallel inside a single batch transaction
+    await prisma.$transaction([
+      ...computed.map((c) =>
+        prisma.bet.update({
+          where: { id: c.betId },
+          data: {
+            status: c.result.won ? 'WON' : 'LOST',
+            payout: c.payout,
+            netResult: c.result.netResult,
+            resolvedAt: now,
+            multiplier: c.result.won ? c.result.multiplier : null,
+            streakBefore: c.result.streakBefore,
+            streakAfter: c.streakAfter,
+          },
+        }),
+      ),
+      ...computed.map((c) =>
+        prisma.eventParticipant.update({
+          where: { id: c.participantId },
+          data: {
+            currentBalance: { increment: c.payout },
+            currentStreak: c.streakAfter,
+            highestStreak: c.highestStreak,
+          },
+        }),
+      ),
+      prisma.match.update({
+        where: { id: matchId },
+        data: { status: 'FINISHED', winner, resolvedAt: now },
+      }),
+    ]);
+
+    const betResults = computed.map((c) => c.result);
+
+    // Apply card effects after main resolution
+    const { CardService } = await import('./CardService.js');
+    await CardService.applyPostResolveEffects(matchId, match.eventId, betResults);
+
+    return {
+      matchId,
+      eventId: match.eventId,
+      matchNumber: match.number,
+      competitorA: match.competitorA,
+      competitorB: match.competitorB,
+      winner,
+      useStreaks,
+      betResults,
+    };
   },
 
   async getNextDraftInfo(eventId: string, afterNumber: number) {

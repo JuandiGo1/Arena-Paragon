@@ -6,6 +6,7 @@ export type CreateEventData = {
   startingParagonita: number;
   useStreaks?: boolean;
   streakMultipliers?: number[];
+  allowCards?: boolean;
 };
 
 export type UpdateEventData = {
@@ -25,6 +26,7 @@ export const EventRepository = {
         status: 'DRAFT',
         useStreaks: data.useStreaks ?? false,
         streakMultipliers: data.streakMultipliers ?? undefined,
+        allowCards: data.allowCards ?? false,
       },
     });
   },

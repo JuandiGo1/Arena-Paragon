@@ -103,29 +103,50 @@ export function buildResultConfirmEmbed(
   return { content: '', embeds: [embed], components: [row] };
 }
 
+function fmt(n: number): string {
+  return Math.abs(n).toLocaleString('es-ES');
+}
+
 export function buildMatchFinishedAnnouncement(result: MatchResolveResult): EmbedBuilder {
   const betLines =
     result.betResults.length > 0
       ? result.betResults
           .map((b) => {
+            const hasOwn = b.ownAmount > 0;
+            const eventBetAmount = b.amount - b.ownAmount;
+
             if (b.won) {
-              let streakLine = '';
-              if (result.useStreaks) {
-                streakLine = `\n🔥 Racha: **${b.streakAfter}** victorias | ×${b.multiplier.toFixed(1)}`;
-              }
+              const streakLine = result.useStreaks
+                ? `\n🔥 Racha: **${b.streakAfter}** victorias · ×${b.multiplier.toFixed(1)}`
+                : '';
+              const charPart = b.rewardCharacterName ? ` · 🎭 **${b.rewardCharacterName}**` : '';
               return (
-                `<@${b.discordId}> ⚔️ **${b.competitor}** | 🎭 **${b.rewardCharacterName}**\n` +
-                `💰 Apostó: **${b.amount}** | 💰 Ganó: **${b.payout}** | 📈 Neto: **+${b.netResult}**` +
+                `<@${b.discordId}> ⚔️ **${b.competitor}**${charPart}\n` +
+                `✅ \`+${fmt(b.netResult)} pg\` · Apostó: \`${fmt(b.amount)} pg\` · Cobró: \`${fmt(b.payout)} pg\`` +
                 streakLine
               );
             }
-            let streakLine = '';
-            if (result.useStreaks && b.streakBefore > 0) {
-              streakLine = `\n💔 Racha rota (tenía **${b.streakBefore}** victorias)`;
+
+            // Lost
+            const streakLine =
+              result.useStreaks && b.streakBefore > 0
+                ? `\n💔 Racha rota (tenía **${b.streakBefore}** victorias)`
+                : '';
+
+            if (hasOwn) {
+              // Loss with own money → show character + breakdown
+              const charPart = b.rewardCharacterName ? ` · 🎭 **${b.rewardCharacterName}** (cobrar)` : '';
+              return (
+                `<@${b.discordId}> ⚔️ **${b.competitor}**${charPart}\n` +
+                `❌ \`-${fmt(b.amount)} pg\` · Del evento: \`${fmt(eventBetAmount)} pg\` · 💸 Propio: \`${fmt(b.ownAmount)} pg\`` +
+                streakLine
+              );
             }
+
+            // Loss without own money → no character
             return (
-              `<@${b.discordId}> ⚔️ **${b.competitor}** | 🎭 **${b.rewardCharacterName}**\n` +
-              `💰 Apostó: **${b.amount}** | ❌ Perdió: **${b.amount}** | 📉 Neto: **${b.netResult}**` +
+              `<@${b.discordId}> ⚔️ **${b.competitor}**\n` +
+              `❌ \`-${fmt(b.amount)} pg\`` +
               streakLine
             );
           })

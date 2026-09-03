@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Bet" ADD COLUMN     "ownAmount" INTEGER NOT NULL DEFAULT 0;

@@ -16,4 +16,5 @@ export const env = {
   guildId: requireEnv("GUILD_ID"),
   databaseUrl: requireEnv("DATABASE_URL"),
   directUrl: process.env.DIRECT_URL,
+  adminRoleIds: (process.env.ADMIN_ROLE_IDS ?? '').split(',').filter(Boolean),
 } as const;

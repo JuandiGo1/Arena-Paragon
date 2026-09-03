@@ -1,6 +1,8 @@
 export type PendingEventCreation = {
   name: string;
   startingParagonita: number;
+  useStreaks?: boolean;
+  streakMultipliers?: number[];
 };
 
 const store = new Map<string, PendingEventCreation>();

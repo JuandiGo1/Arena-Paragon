@@ -42,6 +42,12 @@ enum ScrollType {
   SPECIAL
 }
 
+enum CardUseStatus {
+  PENDING
+  RESOLVED
+  CANCELLED
+}
+
 // ============================================================
 // USER
 // ============================================================
@@ -58,6 +64,8 @@ model User {
   bets              Bet[]
   userCards         UserCard[]
   userScrolls       UserScroll[]
+  cardUses          CardUse[] @relation("CardUseUser")
+  targetCardUses    CardUse[] @relation("CardUseTarget")
 
   @@index([discordId])
 }
@@ -73,7 +81,9 @@ model Event {
   status             EventStatus @default(DRAFT)
 
   useStreaks        Boolean @default(false)
-  streakMultipliers Json? // number[] e.g. [2.0, 2.0, 2.1, 2.2, 2.3, 2.4]
+  streakMultipliers Json?
+
+  allowCards Boolean @default(false)
 
   createdAt  DateTime  @default(now())
   startedAt  DateTime?
@@ -81,6 +91,7 @@ model Event {
 
   participants EventParticipant[]
   matches      Match[]
+  cardUses     CardUse[]
 
   @@index([status])
   @@index([createdAt])
@@ -105,6 +116,8 @@ model EventParticipant {
 
   currentStreak Int @default(0)
   highestStreak Int @default(0)
+
+  cardsBanned Boolean @default(false)
 
   joinedAt DateTime @default(now())
 
@@ -139,8 +152,9 @@ model Match {
   closedAt   DateTime?
   resolvedAt DateTime?
 
-  event Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  bets  Bet[]
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  bets     Bet[]
+  cardUses CardUse[]
 
   @@unique([eventId, number])
   @@index([eventId])
@@ -160,25 +174,16 @@ model Bet {
 
   competitor String
   amount     Int
+  ownAmount  Int @default(0)
 
   status BetStatus @default(PENDING)
 
-  // Datos del sistema de rachas
   streakBefore Int @default(0)
   streakAfter  Int @default(0)
 
-  // Multiplicador utilizado al resolver la apuesta
   multiplier Float?
-
-  // Cantidad obtenida de la apuesta.
-  // Ejemplo: apuesta 20 × 2 = 40
-  payout Int?
-
-  // Resultado neto de la apuesta.
-  // Ejemplo:
-  // +20 si apostó 20 y recibió 40
-  // -20 si perdió
-  netResult Int?
+  payout     Int?
+  netResult  Int?
 
   rewardCharacterName String?
 
@@ -190,7 +195,8 @@ model Bet {
   eventParticipant EventParticipant @relation(fields: [eventParticipantId], references: [id], onDelete: Restrict)
   match            Match            @relation(fields: [matchId], references: [id], onDelete: Restrict)
 
-  cards BetCard[]
+  cards    BetCard[]
+  cardUses CardUse[]
 
   @@unique([eventParticipantId, matchId])
   @@index([userId])
@@ -206,14 +212,17 @@ model Bet {
 model Card {
   id String @id @default(cuid())
 
-  name        String @unique
+  name        String  @unique
   description String
+  imageUrl    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userCards UserCard[]
-  betCards  BetCard[]
+  userCards    UserCard[]
+  betCards     BetCard[]
+  cardUses     CardUse[] @relation("CardUseCard")
+  copiedInUses CardUse[] @relation("CardUseCopied")
 }
 
 // ============================================================
@@ -240,7 +249,7 @@ model UserCard {
 }
 
 // ============================================================
-// CARTA UTILIZADA EN UNA APUESTA
+// CARTA UTILIZADA EN UNA APUESTA (legacy)
 // ============================================================
 
 model BetCard {
@@ -249,9 +258,6 @@ model BetCard {
   betId  String
   cardId String
 
-  // Información adicional sobre cómo se resolvió el efecto.
-  // Nos permite guardar resultados específicos de cartas
-  // sin tener que modificar el schema cada vez.
   effectResult String?
 
   createdAt DateTime @default(now())
@@ -262,6 +268,47 @@ model BetCard {
   @@unique([betId, cardId])
   @@index([betId])
   @@index([cardId])
+}
+
+// ============================================================
+// USO DE CARTA EN UN COMBATE
+// ============================================================
+
+model CardUse {
+  id String @id @default(cuid())
+
+  userId  String
+  cardId  String
+  eventId String
+  matchId String
+  betId   String?
+
+  // Target user (for Bardo and Brujo-as-Bardo)
+  targetUserId String?
+  // For Brujo: which card was copied
+  copiedCardId String?
+
+  // JSON blob: { actingAs?, actingAsCardId?, sourceCardUseId?, targetDiscordId?, targetUserId? }
+  effectData   String?
+  // JSON blob written at resolution: { targetWon?, bonusApplied?, penalty? }
+  effectResult String?
+
+  status     CardUseStatus @default(PENDING)
+  resolvedAt DateTime?
+  createdAt  DateTime      @default(now())
+
+  user       User  @relation("CardUseUser",   fields: [userId],       references: [id], onDelete: Restrict)
+  card       Card  @relation("CardUseCard",   fields: [cardId],       references: [id], onDelete: Restrict)
+  event      Event @relation(                 fields: [eventId],      references: [id], onDelete: Restrict)
+  match      Match @relation(                 fields: [matchId],      references: [id], onDelete: Restrict)
+  bet        Bet?  @relation(                 fields: [betId],        references: [id], onDelete: Restrict)
+  targetUser User? @relation("CardUseTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+  copiedCard Card? @relation("CardUseCopied", fields: [copiedCardId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, matchId])
+  @@index([matchId])
+  @@index([eventId])
+  @@index([userId])
 }
 
 // ============================================================

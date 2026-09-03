@@ -222,6 +222,34 @@ export function buildStreakSelectionMessage() {
   };
 }
 
+export function buildCardsSelectionMessage() {
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('event:cards-yes')
+      .setLabel('Sí, activar cartas')
+      .setEmoji('🃏')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('event:cards-no')
+      .setLabel('No')
+      .setEmoji('✗')
+      .setStyle(ButtonStyle.Secondary),
+  );
+  return {
+    content: '',
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0x5865f2)
+        .setTitle('🃏 ¿Activar cartas de Arena Shinobi?')
+        .setDescription(
+          'Los participantes podrán utilizar sus cartas durante los combates de este evento.\n\n' +
+          '_Las cartas se gestionan desde el inventario de cada jugador._',
+        ),
+    ],
+    components: [row],
+  };
+}
+
 export function buildStreakConfigModal() {
   const DEFAULT = '2.0, 2.0, 2.1, 2.2, 2.3, 2.4';
   return new ModalBuilder()

@@ -4,12 +4,13 @@ import {
   ButtonStyle,
 } from 'discord.js';
 
-// ─── Types (mirrors what EventRepository.findWithFullLog returns) ─────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type BetLog = {
   match: { number: number; competitorA: string; competitorB: string; winner: string | null };
   competitor: string;
   amount: number;
+  ownAmount: number;
   payout: number | null;
   netResult: number | null;
   rewardCharacterName: string | null;
@@ -20,6 +21,8 @@ type ParticipantLog = {
   user: { discordId: string; discordUsername: string };
   startingBalance: number;
   currentBalance: number;
+  currentStreak: number;
+  highestStreak: number;
   bets: BetLog[];
 };
 
@@ -43,38 +46,59 @@ function fmt(n: number): string {
   return Math.abs(n).toLocaleString('es-ES');
 }
 
-function fmtBalance(n: number): string {
-  return n < 0 ? `-${fmt(n)}` : fmt(n);
+function fmtSigned(n: number): string {
+  return n >= 0 ? `+${fmt(n)} pg` : `-${fmt(Math.abs(n))} pg`;
 }
 
-function fmtNet(n: number): string {
-  return n >= 0 ? `+${fmt(n)} pg` : `-${fmt(n)} pg`;
+function fmtDate(d: Date | null): string {
+  if (!d) return '—';
+  const dd = d.getDate().toString().padStart(2, '0');
+  const mm = (d.getMonth() + 1).toString().padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
 }
 
-// ─── Participant section builder ──────────────────────────────────────────────
+// ─── Participant section ──────────────────────────────────────────────────────
 
 function buildSection(p: ParticipantLog, rank: number): string {
   const net = p.currentBalance - p.startingBalance;
   const wins = p.bets.filter((b) => b.status === 'WON').length;
   const losses = p.bets.filter((b) => b.status === 'LOST').length;
+  const netStr = fmtSigned(net);
 
-  let s = `## ${rankEmoji(rank)} <@${p.user.discordId}>\n\n`;
-  s += `💰 **Paragonita:** \`${fmt(p.startingBalance)}\` → **\`${fmtBalance(p.currentBalance)}\`** \`(${fmtNet(net)})\`\n`;
-  s += `📈 **Racha:** \`${wins}G\` · \`${losses}D\`\n`;
+  // Heading: rank + mention + net result
+  let s = `## ${rankEmoji(rank)} <@${p.user.discordId}> — ${netStr}\n`;
 
+  // Balance row
+  s += `💰 \`${fmt(p.startingBalance)} pg\` → \`${fmt(p.currentBalance)} pg\`\n`;
+
+  // Record row
+  const streakPart = p.highestStreak > 0 ? ` · Racha máx. **${p.highestStreak}**` : '';
+  s += `⚔️ **${wins}G** · ${losses}D${streakPart}\n`;
+
+  // Bets
   if (p.bets.length > 0) {
-    s += `\n### ⚔️ Apuestas\n`;
+    s += '\n';
     for (const b of p.bets) {
       const won = b.status === 'WON';
-      const icon = won ? '🟢' : '🔴';
       const netBet = b.netResult ?? (won ? (b.payout ?? 0) - b.amount : -b.amount);
-      const charPart = b.rewardCharacterName ? ` · 🎭 \`${b.rewardCharacterName}\`` : '';
-      s += `> ${icon} **#${b.match.number}** · **${b.competitor}**\n`;
-      s += `> 💰 \`${fmtNet(netBet)}\`${charPart}\n\n`;
+      const hasOwn = b.ownAmount > 0;
+      const eventBetAmount = b.amount - b.ownAmount;
+
+      if (won) {
+        const charPart = b.rewardCharacterName ? ` · 🎭 ${b.rewardCharacterName}` : '';
+        s += `> ✅ **#${b.match.number}** · ${b.competitor} · \`${fmtSigned(netBet)}\`${charPart}\n`;
+      } else if (hasOwn) {
+        const charPart = b.rewardCharacterName ? ` · 🎭 ${b.rewardCharacterName} *(cobrar)*` : '';
+        s += `> ❌ **#${b.match.number}** · ${b.competitor} · \`${fmtSigned(netBet)}\`${charPart}\n`;
+        s += `>   ├ Evento: \`-${fmt(eventBetAmount)} pg\` · 💸 Propio: \`-${fmt(b.ownAmount)} pg\`\n`;
+      } else {
+        s += `> ❌ **#${b.match.number}** · ${b.competitor} · \`${fmtSigned(netBet)}\`\n`;
+      }
     }
   }
 
-  s += `---\n\n`;
+  s += '\n---\n\n';
   return s;
 }
 
@@ -82,14 +106,14 @@ function buildSection(p: ParticipantLog, rank: number): string {
 
 const MAX_CHARS = 1900;
 
-/**
- * Builds the full bitácora as an array of message strings (≤1900 chars each),
- * split at participant boundaries so no section is cut mid-way.
- */
 export function buildBitacoraTexts(event: EventLog): string[] {
+  const dateStr = fmtDate(event.finishedAt ?? event.startedAt);
+  const count = event.participants.length;
+
   const header =
-    `# 🏆 BITÁCORA — ${event.name.toUpperCase()}\n\n` +
-    `> **Resultados y desempeño de los participantes**\n\n---\n\n`;
+    `# 🏆 BITÁCORA — ${event.name.toUpperCase()}\n` +
+    `> 📅 ${dateStr} · 👥 ${count} participante${count !== 1 ? 's' : ''}\n\n` +
+    `---\n\n`;
 
   const chunks: string[] = [];
   let current = header;
@@ -108,21 +132,18 @@ export function buildBitacoraTexts(event: EventLog): string[] {
   return chunks.length > 0 ? chunks : [header + '_Sin participantes._'];
 }
 
-/**
- * Returns the ephemeral payload: first chunk of the bitácora text as content
- * plus a "Publicar" button.
- */
 export function buildBitacoraEphemeral(event: EventLog, eventId: string) {
   const texts = buildBitacoraTexts(event);
-  const preview = texts[0] ?? '';
+  const first = texts[0] ?? '';
   const hasMore = texts.length > 1;
-  const remaining = event.participants.length -
-    // count participants that fit in the first chunk
-    preview.split('<@').length + 1;
+
+  // Count participants shown in first chunk
+  const shownCount = (first.match(/^## /gm) ?? []).length;
+  const remaining = event.participants.length - shownCount;
 
   const content = hasMore
-    ? preview + `\n_... y ${Math.max(0, remaining)} participante(s) más. Publica para ver completa._`
-    : preview;
+    ? first + `\n_... y ${remaining} participante(s) más. Publica para ver completa._`
+    : first;
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()

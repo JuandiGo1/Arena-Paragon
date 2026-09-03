@@ -10,7 +10,14 @@ export const BetRepository = {
   async findActiveByMatchId(matchId: string) {
     return prisma.bet.findMany({
       where: { matchId, status: 'PENDING' },
-      include: { user: { select: { discordId: true, discordUsername: true } } },
+      select: {
+        id: true,
+        amount: true,
+        ownAmount: true,
+        competitor: true,
+        rewardCharacterName: true,
+        user: { select: { discordId: true, discordUsername: true } },
+      },
       orderBy: { createdAt: 'asc' },
     });
   },

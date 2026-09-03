@@ -8,6 +8,7 @@ import type { ChatInputCommandInteraction } from 'discord.js';
 import type { Command } from '../../../domain/Command.js';
 import { buildCreateEventModal } from '../../../embeds/eventPanel.js';
 import { EventService } from '../../../services/EventService.js';
+import { isAdmin } from '../../../utils/permissions.js';
 import { logger } from '../../../utils/logger.js';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -19,6 +20,10 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 async function handleCrear(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({ content: '❌ No tienes permisos para usar este comando.', ephemeral: true });
+    return;
+  }
   await interaction.showModal(buildCreateEventModal());
 }
 
@@ -58,6 +63,10 @@ async function handleVer(interaction: ChatInputCommandInteraction): Promise<void
 }
 
 async function handleIniciar(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({ content: '❌ No tienes permisos para usar este comando.', ephemeral: true });
+    return;
+  }
   await interaction.deferReply({ ephemeral: true });
 
   try {
@@ -93,6 +102,10 @@ async function handleIniciar(interaction: ChatInputCommandInteraction): Promise<
 }
 
 async function handleEditar(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({ content: '❌ No tienes permisos para usar este comando.', ephemeral: true });
+    return;
+  }
   await interaction.deferReply({ ephemeral: true });
 
   try {
@@ -128,6 +141,10 @@ async function handleEditar(interaction: ChatInputCommandInteraction): Promise<v
 }
 
 async function handleContinuar(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({ content: '❌ No tienes permisos para usar este comando.', ephemeral: true });
+    return;
+  }
   await interaction.deferReply({ ephemeral: true });
 
   try {

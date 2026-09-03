@@ -12,6 +12,7 @@ export type QuickBetParams = {
   competitor: string;
   amount: number;
   rewardCharacterName: string;
+  ownAmount?: number;
 };
 
 export type BetResult = {
@@ -125,9 +126,11 @@ export const BetService = {
       });
 
       let balanceDelta: number;
+      let ownAmount: number;
 
       if (!existingBet) {
         balanceDelta = -params.amount;
+        ownAmount = Math.max(0, params.amount - participant.currentBalance);
         await tx.bet.create({
           data: {
             userId: user.id,
@@ -135,17 +138,20 @@ export const BetService = {
             matchId: params.matchId,
             competitor: params.competitor,
             amount: params.amount,
+            ownAmount,
             rewardCharacterName: params.rewardCharacterName,
             status: 'PENDING',
           },
         });
       } else if (existingBet.status === 'CANCELLED') {
         balanceDelta = -params.amount;
+        ownAmount = Math.max(0, params.amount - participant.currentBalance);
         await tx.bet.update({
           where: { id: existingBet.id },
           data: {
             competitor: params.competitor,
             amount: params.amount,
+            ownAmount,
             rewardCharacterName: params.rewardCharacterName,
             status: 'PENDING',
             cancelledAt: null,
@@ -154,11 +160,14 @@ export const BetService = {
       } else if (existingBet.status === 'PENDING') {
         // Modification: return old amount, charge new
         balanceDelta = existingBet.amount - params.amount;
+        const availableForEdit = participant.currentBalance + existingBet.amount;
+        ownAmount = Math.max(0, params.amount - availableForEdit);
         await tx.bet.update({
           where: { id: existingBet.id },
           data: {
             competitor: params.competitor,
             amount: params.amount,
+            ownAmount,
             rewardCharacterName: params.rewardCharacterName,
           },
         });

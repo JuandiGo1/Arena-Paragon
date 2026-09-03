@@ -127,7 +127,13 @@ registerButtonHandler({
               await msg.edit(
                 buildMatchBetsPublicMessage(
                   match.number, matchId, match.competitorA, match.competitorB,
-                  bets.map(b => ({ discordId: b.user.discordId, amount: b.amount, competitor: b.competitor })),
+                  bets.map(b => ({
+                    discordId: b.user.discordId,
+                    amount: b.amount,
+                    ownAmount: b.ownAmount,
+                    competitor: b.competitor,
+                    rewardCharacterName: b.rewardCharacterName,
+                  })),
                 ),
               );
             }
@@ -196,7 +202,13 @@ async function updatePublicMessage(matchId: string, client: import('discord.js')
       await msg.edit(
         buildMatchBetsPublicMessage(
           match.number, matchId, match.competitorA, match.competitorB,
-          bets.map(b => ({ discordId: b.user.discordId, amount: b.amount, competitor: b.competitor })),
+          bets.map(b => ({
+            discordId: b.user.discordId,
+            amount: b.amount,
+            ownAmount: b.ownAmount,
+            competitor: b.competitor,
+            rewardCharacterName: b.rewardCharacterName,
+          })),
         ),
       );
     }

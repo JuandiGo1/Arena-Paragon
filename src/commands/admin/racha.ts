@@ -8,6 +8,7 @@ import type { ChatInputCommandInteraction } from 'discord.js';
 import type { Command } from '../../domain/Command.js';
 import { ParticipantRepository } from '../../repositories/ParticipantRepository.js';
 import { pendingStreakSets } from '../../lib/pendingStreakSets.js';
+import { isAdmin } from '../../utils/permissions.js';
 import { logger } from '../../utils/logger.js';
 
 const data = new SlashCommandBuilder()
@@ -29,6 +30,11 @@ const data = new SlashCommandBuilder()
   );
 
 const execute = async (interaction: ChatInputCommandInteraction): Promise<void> => {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({ content: '❌ No tienes permisos para usar este comando.', ephemeral: true });
+    return;
+  }
+
   const targetUser = interaction.options.getUser('usuario', true);
   const value = interaction.options.getInteger('valor', true);
 

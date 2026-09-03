@@ -15,6 +15,8 @@ import './interactions/selects/event/index.js';
 import './interactions/selects/bet/index.js';
 import './interactions/selects/combate/index.js';
 import './interactions/selects/racha/index.js';
+import './interactions/buttons/cards/index.js';
+import './interactions/selects/cards/index.js';
 
 logger.info('Loading commands...');
 const commands = await loadCommands();

@@ -6,6 +6,7 @@ export type CreateEventInput = {
   startingParagonita: number;
   useStreaks?: boolean;
   streakMultipliers?: number[];
+  allowCards?: boolean;
 };
 export type UpdateEventInput = { name?: string; startingParagonita?: number };
 export type ValidationResult = { ok: true } | { ok: false; error: string };

@@ -2,6 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import {
   buildAddMatchModal,
   buildCancelConfirmation,
+  buildCardsSelectionMessage,
   buildCloseEventConfirmation,
   buildDeleteConfirmation,
   buildEditEventModal,
@@ -467,7 +468,7 @@ registerButtonHandler({
   },
 });
 
-// ─── event:no-streaks — crea evento sin sistema de rachas ────────────────────
+// ─── event:no-streaks — guarda configuración de rachas y muestra selección de cartas
 
 registerButtonHandler({
   customId: 'event:no-streaks',
@@ -481,17 +482,77 @@ registerButtonHandler({
       });
       return;
     }
+    pendingEventCreations.set(interaction.user.id, { ...pending, useStreaks: false });
+    await interaction.update(
+      buildCardsSelectionMessage() as Parameters<typeof interaction.update>[0],
+    );
+  },
+});
 
+// ─── event:cards-yes — crea evento con cartas activadas ──────────────────────
+
+registerButtonHandler({
+  customId: 'event:cards-yes',
+  async execute(interaction) {
+    const pending = pendingEventCreations.get(interaction.user.id);
+    if (!pending) {
+      await interaction.update({
+        content: '❌ No hay evento pendiente. Vuelve a ejecutar `/evento crear`.',
+        embeds: [],
+        components: [],
+      });
+      return;
+    }
     await interaction.deferUpdate();
     try {
-      const event = await EventService.createEvent({ ...pending, useStreaks: false });
+      const event = await EventService.createEvent({
+        name: pending.name,
+        startingParagonita: pending.startingParagonita,
+        useStreaks: pending.useStreaks ?? false,
+        streakMultipliers: pending.streakMultipliers,
+        allowCards: true,
+      });
       pendingEventCreations.clear(interaction.user.id);
-
       const full = await EventService.getEventWithMatches(event.id);
       if (!full) throw new Error('Error al cargar el evento creado.');
       await interaction.editReply(buildEventPanel(full) as Parameters<typeof interaction.editReply>[0]);
     } catch (err) {
-      logger.error('Error al crear evento sin rachas', err);
+      logger.error('Error al crear evento con cartas', err);
+      const msg = err instanceof Error ? err.message : 'Error desconocido.';
+      await interaction.editReply({ content: `❌ ${msg}`, embeds: [], components: [] });
+    }
+  },
+});
+
+// ─── event:cards-no — crea evento sin cartas ─────────────────────────────────
+
+registerButtonHandler({
+  customId: 'event:cards-no',
+  async execute(interaction) {
+    const pending = pendingEventCreations.get(interaction.user.id);
+    if (!pending) {
+      await interaction.update({
+        content: '❌ No hay evento pendiente. Vuelve a ejecutar `/evento crear`.',
+        embeds: [],
+        components: [],
+      });
+      return;
+    }
+    await interaction.deferUpdate();
+    try {
+      const event = await EventService.createEvent({
+        name: pending.name,
+        startingParagonita: pending.startingParagonita,
+        useStreaks: pending.useStreaks ?? false,
+        streakMultipliers: pending.streakMultipliers,
+        allowCards: false,
+      });
+      pendingEventCreations.clear(interaction.user.id);
+      const full = await EventService.getEventWithMatches(event.id);
+      if (!full) throw new Error('Error al cargar el evento creado.');
+      await interaction.editReply(buildEventPanel(full) as Parameters<typeof interaction.editReply>[0]);
+    } catch (err) {
+      logger.error('Error al crear evento sin cartas', err);
       const msg = err instanceof Error ? err.message : 'Error desconocido.';
       await interaction.editReply({ content: `❌ ${msg}`, embeds: [], components: [] });
     }
